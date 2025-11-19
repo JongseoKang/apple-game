@@ -45,21 +45,19 @@ export const Apple: React.FC<AppleProps> = ({
           border-2
           ${isSelected 
             ? 'bg-yellow-200 border-yellow-500 scale-110 z-10' 
-            : cell.isHinted 
-              ? 'bg-blue-100 border-blue-400 animate-pulse'
-              : 'bg-red-500 border-red-700 hover:scale-105'
+            : 'bg-red-500 border-red-700 hover:scale-105'
           }
         `}
       >
         {/* Leaf */}
-        {!isSelected && !cell.isHinted && (
+        {!isSelected && (
           <div className="absolute -top-1 left-1/2 w-2 h-2 bg-green-600 rounded-tr-lg rounded-bl-lg -translate-x-1/2" />
         )}
 
         <span 
           className={`
             text-xl font-bold
-            ${isSelected || cell.isHinted ? 'text-gray-800' : 'text-white'}
+            ${isSelected ? 'text-gray-800' : 'text-white'}
           `}
         >
           {cell.value}

@@ -9,7 +9,6 @@ export interface AppleCell {
   r: number;
   c: number;
   isCleared: boolean;
-  isHinted?: boolean;
 }
 
 export interface SelectionBox {

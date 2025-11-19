@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { GameStatus } from './types';
 import { GameBoard } from './components/GameBoard';
 import { GAME_DURATION_SECONDS } from './constants';
-import { Timer, Trophy, Play, AlertTriangle } from 'lucide-react';
+import { Timer, Trophy, Play } from 'lucide-react';
 
 const App: React.FC = () => {
   const [status, setStatus] = useState<GameStatus>(GameStatus.IDLE);
@@ -114,7 +114,7 @@ const App: React.FC = () => {
       </main>
 
       <footer className="w-full p-4 text-center text-gray-400 text-sm">
-         Powered by Gemini AI • React • Tailwind
+         React • Tailwind
       </footer>
     </div>
   );

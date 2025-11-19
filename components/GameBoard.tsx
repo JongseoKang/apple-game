@@ -2,8 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AppleCell, Point, SelectionBox, GameStatus } from '../types';
 import { Apple } from './Apple';
 import { ROWS, COLS, TARGET_SUM, getWeightedRandom } from '../constants';
-import { Play, RefreshCw, BrainCircuit, Loader2 } from 'lucide-react';
-import { getSmartHint } from '../services/geminiService';
+import { RefreshCw } from 'lucide-react';
 
 interface GameBoardProps {
   status: GameStatus;
@@ -23,7 +22,6 @@ export const GameBoard: React.FC<GameBoardProps> = ({
   const [grid, setGrid] = useState<AppleCell[][]>([]);
   const [selection, setSelection] = useState<SelectionBox | null>(null);
   const [dragStart, setDragStart] = useState<Point | null>(null);
-  const [isHintLoading, setIsHintLoading] = useState(false);
   const boardRef = useRef<HTMLDivElement>(null);
 
   // Initialize Board
@@ -52,11 +50,6 @@ export const GameBoard: React.FC<GameBoardProps> = ({
       initBoard();
     }
   }, [status, grid.length, initBoard]);
-
-  // Reset hint flags
-  const clearHints = () => {
-    setGrid(prev => prev.map(row => row.map(cell => ({ ...cell, isHinted: false }))));
-  };
 
   // Selection Logic helpers
   const getSelectedRange = (start: Point, end: Point) => {
@@ -92,7 +85,6 @@ export const GameBoard: React.FC<GameBoardProps> = ({
   // Mouse Handlers
   const handleMouseDown = (r: number, c: number) => {
     if (status !== GameStatus.PLAYING) return;
-    clearHints();
     setDragStart({ r, c });
     setSelection({ start: { r, c }, end: { r, c } });
   };
@@ -137,16 +129,6 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     if (!dragStart || status !== GameStatus.PLAYING) return;
     
     const touch = e.touches[0];
-    const element = document.elementFromPoint(touch.clientX, touch.clientY);
-    
-    // This assumes the touch is over a cell div inside the grid
-    // We can try to infer indices from data attributes if we added them, 
-    // or calculation based on board rect. 
-    // Simple approach: check if we are hovering a known cell structure.
-    // For robustness in this demo, we rely on the fact that the browser 
-    // might handle 'mouseenter' if we were using mouse, but for touch, 
-    // we need to do coordinate mapping.
-    
     // Optimization: In a real robust app, calculate grid coordinates relative to boardRef.
     if (boardRef.current) {
        const rect = boardRef.current.getBoundingClientRect();
@@ -164,28 +146,6 @@ export const GameBoard: React.FC<GameBoardProps> = ({
          setSelection({ start: dragStart, end: { r, c } });
        }
     }
-  };
-
-  // AI Hint Logic
-  const handleGetHint = async () => {
-    if (isHintLoading || status !== GameStatus.PLAYING) return;
-    setIsHintLoading(true);
-    clearHints();
-
-    const hint = await getSmartHint(grid);
-
-    if (hint.found && hint.startRow !== undefined && hint.endCol !== undefined) {
-      setGrid(prev => prev.map((row, r) => row.map((cell, c) => {
-        if (r >= hint.startRow! && r <= hint.endRow! && c >= hint.startCol! && c <= hint.endCol! && !cell.isCleared) {
-           return { ...cell, isHinted: true };
-        }
-        return cell;
-      })));
-    } else {
-        // Shake effect or toast could go here
-        console.log("No hint found");
-    }
-    setIsHintLoading(false);
   };
 
   // Current Selection Sum for UI
@@ -212,15 +172,6 @@ export const GameBoard: React.FC<GameBoardProps> = ({
         </div>
 
         <div className="flex gap-2">
-           <button 
-             onClick={handleGetHint}
-             disabled={isHintLoading || status !== GameStatus.PLAYING}
-             className="flex items-center gap-2 px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 disabled:opacity-50 font-semibold transition-colors"
-           >
-             {isHintLoading ? <Loader2 className="w-5 h-5 animate-spin"/> : <BrainCircuit className="w-5 h-5" />}
-             <span className="hidden sm:inline">AI Hint</span>
-           </button>
-           
            <button 
              onClick={initBoard}
              className="p-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors"

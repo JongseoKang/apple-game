@@ -1,10 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { GameStatus, GameMessage, ChatMessagePayload } from './types';
+import { GameStatus, GameMessage, ChatMessagePayload, AppleCell } from './types';
 import { GameBoard } from './components/GameBoard';
 import { LoginScreen } from './components/LoginScreen';
 import { ChatWidget } from './components/ChatWidget';
-import { GAME_DURATION_SECONDS, OPPONENT_MAPPING, PEER_ID_PREFIX, CREDENTIALS } from './constants';
-import { Timer, Trophy, Play, LogOut, User, Heart, Wifi, WifiOff, UserMinus, Loader2 } from 'lucide-react';
+import { GAME_DURATION_SECONDS, OPPONENT_MAPPING, PEER_ID_PREFIX, CREDENTIALS, ROWS, COLS, getWeightedRandom } from './constants';
+import { Timer, Trophy, Play, LogOut, User, Heart, Wifi, WifiOff, UserMinus, Loader2, Medal, Frown, Minus } from 'lucide-react';
+
+interface GameStats {
+  wins: number;
+  losses: number;
+  draws: number;
+}
 
 const App: React.FC = () => {
   // Auth State
@@ -18,14 +24,39 @@ const App: React.FC = () => {
   const [score, setScore] = useState(0);
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION_SECONDS);
   const [canExit, setCanExit] = useState(false); // Button activation state
+  
+  // Board State (Lifted from GameBoard)
+  const [grid, setGrid] = useState<AppleCell[][]>([]);
 
   // Multiplayer State
   const [isConnected, setIsConnected] = useState(false);
   const [opponentScore, setOpponentScore] = useState(0);
   const [chatMessages, setChatMessages] = useState<ChatMessagePayload[]>([]);
   
+  // Stats State
+  const [stats, setStats] = useState<GameStats>({ wins: 0, losses: 0, draws: 0 });
+  
   const peerRef = useRef<any>(null);
   const connRef = useRef<any>(null);
+
+  // Helper: Generate Grid
+  const generateNewGrid = (): AppleCell[][] => {
+    const newGrid: AppleCell[][] = [];
+    for (let r = 0; r < ROWS; r++) {
+      const row: AppleCell[] = [];
+      for (let c = 0; c < COLS; c++) {
+        row.push({
+          id: `${r}-${c}-${Date.now()}-${Math.random()}`, // Unique ID
+          value: getWeightedRandom(),
+          r,
+          c,
+          isCleared: false
+        });
+      }
+      newGrid.push(row);
+    }
+    return newGrid;
+  };
 
   // Cleanup peer on unmount
   useEffect(() => {
@@ -34,14 +65,40 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // Handle Game Over Button Delay
+  // Load Stats on Login
+  useEffect(() => {
+    if (user) {
+      const savedStats = localStorage.getItem(`apple-stats-${user}`);
+      if (savedStats) {
+        setStats(JSON.parse(savedStats));
+      } else {
+        setStats({ wins: 0, losses: 0, draws: 0 });
+      }
+    }
+  }, [user]);
+
+  // Handle Game Over: Delay & Stats Update
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
+
     if (status === GameStatus.GAME_OVER) {
       setCanExit(false);
       timer = setTimeout(() => {
         setCanExit(true);
       }, 3000);
+
+      // Update Stats only if connected (Multiplayer)
+      if (isConnected && user) {
+        setStats(prev => {
+          const newStats = { ...prev };
+          if (score > opponentScore) newStats.wins++;
+          else if (score < opponentScore) newStats.losses++;
+          else newStats.draws++;
+
+          localStorage.setItem(`apple-stats-${user}`, JSON.stringify(newStats));
+          return newStats;
+        });
+      }
     } else {
       setCanExit(false);
     }
@@ -162,10 +219,21 @@ const App: React.FC = () => {
   const handleMessage = (msg: GameMessage) => {
     switch (msg.type) {
       case 'START':
-        startGame(false); // Start as follower
+        // Receive initial grid from host for perfect sync
+        if (msg.payload && msg.payload.grid) {
+          setGrid(msg.payload.grid);
+        }
+        setScore(0);
+        setOpponentScore(0);
+        setTimeLeft(GAME_DURATION_SECONDS);
+        setStatus(GameStatus.PLAYING);
         break;
       case 'SCORE':
         setOpponentScore(msg.payload);
+        break;
+      case 'APPLES_CLEARED':
+        // Payload should be list of Apple IDs to clear
+        handleRemoteClear(msg.payload);
         break;
       case 'GAME_OVER':
         // Handled by time usually, but can sync here
@@ -184,6 +252,48 @@ const App: React.FC = () => {
   const sendMessage = (msg: GameMessage) => {
     if (connRef.current && connRef.current.open) {
       connRef.current.send(msg);
+    }
+  };
+
+  // Sync Logic: Handle Remote Clears
+  const handleRemoteClear = (clearedIds: string[]) => {
+    setGrid(prevGrid => {
+      return prevGrid.map(row => 
+        row.map(cell => {
+          if (clearedIds.includes(cell.id)) {
+            return { ...cell, isCleared: true };
+          }
+          return cell;
+        })
+      );
+    });
+  };
+
+  // GameBoard Callback: Handle Local Clears
+  const handleLocalSolve = (cells: AppleCell[]) => {
+    // 1. Update Local Grid
+    const idsToClear = cells.map(c => c.id);
+    
+    setGrid(prevGrid => {
+      return prevGrid.map(row => 
+        row.map(cell => {
+          if (idsToClear.includes(cell.id)) {
+            return { ...cell, isCleared: true };
+          }
+          return cell;
+        })
+      );
+    });
+
+    // 2. Update Score
+    setScore(prev => prev + cells.length);
+
+    // 3. Send updates to opponent
+    if (isConnected) {
+      sendMessage({ type: 'APPLES_CLEARED', payload: idsToClear });
+      // Note: We send score separately to keep it reliable, 
+      // though we could technically calculate it from clears.
+      // But sticking to explicit score messages is safer.
     }
   };
 
@@ -246,26 +356,29 @@ const App: React.FC = () => {
   };
 
   const handleStartClick = () => {
-    startGame(true);
+    // Initiator generates the grid
+    const initialGrid = generateNewGrid();
+    setGrid(initialGrid);
+    
+    setScore(0);
+    setOpponentScore(0);
+    setTimeLeft(GAME_DURATION_SECONDS);
+    setStatus(GameStatus.PLAYING);
+    
+    // Send START with the generated grid
+    sendMessage({ 
+      type: 'START',
+      payload: { grid: initialGrid }
+    });
   };
 
   const handleSoloPlayClick = () => {
     // Single player start
+    setGrid(generateNewGrid());
     setScore(0);
     setOpponentScore(0);
     setTimeLeft(GAME_DURATION_SECONDS);
     setStatus(GameStatus.PLAYING);
-    // No message sent
-  };
-
-  const startGame = (isInitiator: boolean) => {
-    setScore(0);
-    setOpponentScore(0);
-    setTimeLeft(GAME_DURATION_SECONDS);
-    setStatus(GameStatus.PLAYING);
-    if (isInitiator) {
-      sendMessage({ type: 'START' });
-    }
   };
 
   const handleRestart = () => {
@@ -281,6 +394,13 @@ const App: React.FC = () => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const getResultTitle = () => {
+    if (!isConnected) return "게임 종료";
+    if (score > opponentScore) return "WIN! 🎉";
+    if (score < opponentScore) return "LOSE... 😭";
+    return "DRAW! 🤝";
   };
 
   // If not logged in, show Login Screen
@@ -351,7 +471,7 @@ const App: React.FC = () => {
                {isConnected ? '커플 연결 완료! 💑' : '상대방 기다리는 중...'}
              </h2>
              
-             <div className="flex items-center justify-center gap-2 mb-8 text-sm">
+             <div className="flex items-center justify-center gap-2 mb-6 text-sm">
                {isConnected ? (
                  <span className="flex items-center gap-1 text-green-600 font-semibold bg-green-50 px-3 py-1 rounded-full">
                    <Wifi className="w-4 h-4" /> Online
@@ -361,6 +481,27 @@ const App: React.FC = () => {
                    <WifiOff className="w-4 h-4" /> Offline
                  </span>
                )}
+             </div>
+
+             {/* Record Card */}
+             <div className="mb-8 bg-gray-50 rounded-xl p-4 border border-gray-100">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">VS Record</p>
+                <div className="flex justify-between items-center px-4">
+                   <div className="flex flex-col items-center">
+                      <span className="text-2xl font-black text-green-500">{stats.wins}</span>
+                      <span className="text-[10px] font-bold text-gray-400">WIN</span>
+                   </div>
+                   <div className="w-px h-8 bg-gray-200"></div>
+                   <div className="flex flex-col items-center">
+                      <span className="text-2xl font-black text-gray-400">{stats.draws}</span>
+                      <span className="text-[10px] font-bold text-gray-400">DRAW</span>
+                   </div>
+                   <div className="w-px h-8 bg-gray-200"></div>
+                   <div className="flex flex-col items-center">
+                      <span className="text-2xl font-black text-red-500">{stats.losses}</span>
+                      <span className="text-[10px] font-bold text-gray-400">LOSE</span>
+                   </div>
+                </div>
              </div>
 
              <p className="text-gray-500 mb-8 leading-relaxed">
@@ -401,17 +542,22 @@ const App: React.FC = () => {
         {status === GameStatus.GAME_OVER && (
            <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md text-center border-b-4 border-red-200 animate-in fade-in zoom-in duration-300 w-full mb-6">
              <div className="mx-auto mb-4 text-amber-500">
-               <Trophy className="w-16 h-16 mx-auto drop-shadow-sm" />
+               {isConnected && score > opponentScore && <Medal className="w-16 h-16 mx-auto text-yellow-400 drop-shadow-md" />}
+               {isConnected && score < opponentScore && <Frown className="w-16 h-16 mx-auto text-gray-400" />}
+               {isConnected && score === opponentScore && <Minus className="w-16 h-16 mx-auto text-gray-400" />}
+               {!isConnected && <Trophy className="w-16 h-16 mx-auto drop-shadow-sm" />}
              </div>
-             <h2 className="text-3xl font-bold text-gray-800 mb-2">시간 종료!</h2>
              
-             <div className={`grid gap-4 mb-6 ${isConnected ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                <div className="py-4 bg-red-50 rounded-xl border border-red-100">
+             <h2 className="text-3xl font-black text-gray-800 mb-1">{getResultTitle()}</h2>
+             <p className="text-gray-400 text-sm mb-6 font-medium">Game Finished</p>
+             
+             <div className={`grid gap-4 mb-8 ${isConnected ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                <div className={`py-4 rounded-xl border-2 ${isConnected && score > opponentScore ? 'bg-red-50 border-red-200 ring-2 ring-red-100' : 'bg-gray-50 border-gray-100'}`}>
                   <p className="text-gray-500 text-xs uppercase tracking-wider font-semibold mb-1">My Score</p>
                   <div className="text-4xl font-black text-red-500">{score}</div>
                 </div>
                 {isConnected && (
-                  <div className="py-4 bg-blue-50 rounded-xl border border-blue-100">
+                  <div className={`py-4 rounded-xl border-2 ${score < opponentScore ? 'bg-blue-50 border-blue-200 ring-2 ring-blue-100' : 'bg-gray-50 border-gray-100'}`}>
                     <p className="text-gray-500 text-xs uppercase tracking-wider font-semibold mb-1">Opponent</p>
                     <div className="text-4xl font-black text-blue-500">{opponentScore}</div>
                   </div>
@@ -452,12 +598,12 @@ const App: React.FC = () => {
         {status === GameStatus.PLAYING && (
           <GameBoard 
             status={status}
-            setStatus={setStatus}
+            grid={grid}
             score={score}
-            setScore={setScore}
-            onGameOver={() => setStatus(GameStatus.GAME_OVER)}
             opponentScore={opponentScore}
             isConnected={isConnected}
+            onSolve={handleLocalSolve}
+            onRefreshBoard={() => setGrid(generateNewGrid())}
           />
         )}
 

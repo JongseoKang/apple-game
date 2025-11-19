@@ -35,7 +35,7 @@ export interface HintResponse {
 }
 
 // Multiplayer Types
-export type MessageType = 'START' | 'SCORE' | 'GAME_OVER' | 'RESTART' | 'CHAT';
+export type MessageType = 'START' | 'SCORE' | 'GAME_OVER' | 'RESTART' | 'CHAT' | 'APPLES_CLEARED';
 
 export interface GameMessage {
   type: MessageType;

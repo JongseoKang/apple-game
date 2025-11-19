@@ -13,6 +13,8 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ currentUser, messages, o
   const [inputText, setInputText] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Auto-scroll removed as requested
+  /* 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -20,6 +22,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ currentUser, messages, o
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+  */
 
   const handleSend = (e?: React.FormEvent) => {
     if (e) e.preventDefault();

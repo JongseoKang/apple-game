@@ -1,59 +1,31 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useRef } from 'react';
 import { AppleCell, Point, SelectionBox, GameStatus } from '../types';
 import { Apple } from './Apple';
-import { ROWS, COLS, TARGET_SUM, getWeightedRandom } from '../constants';
+import { ROWS, COLS, TARGET_SUM } from '../constants';
 import { RefreshCw, Heart } from 'lucide-react';
 
 interface GameBoardProps {
   status: GameStatus;
-  setStatus: (status: GameStatus) => void;
+  grid: AppleCell[][];
   score: number;
-  setScore: React.Dispatch<React.SetStateAction<number>>;
-  onGameOver: () => void;
   opponentScore: number;
   isConnected: boolean;
+  onSolve: (cells: AppleCell[]) => void;
+  onRefreshBoard?: () => void; // Optional: only for single player or initiator
 }
 
 export const GameBoard: React.FC<GameBoardProps> = ({ 
   status, 
-  setStatus, 
+  grid,
   score, 
-  setScore,
-  onGameOver,
   opponentScore,
-  isConnected
+  isConnected,
+  onSolve,
+  onRefreshBoard
 }) => {
-  const [grid, setGrid] = useState<AppleCell[][]>([]);
   const [selection, setSelection] = useState<SelectionBox | null>(null);
   const [dragStart, setDragStart] = useState<Point | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
-
-  // Initialize Board
-  const initBoard = useCallback(() => {
-    const newGrid: AppleCell[][] = [];
-    for (let r = 0; r < ROWS; r++) {
-      const row: AppleCell[] = [];
-      for (let c = 0; c < COLS; c++) {
-        row.push({
-          id: `${r}-${c}-${Math.random()}`,
-          value: getWeightedRandom(),
-          r,
-          c,
-          isCleared: false
-        });
-      }
-      newGrid.push(row);
-    }
-    setGrid(newGrid);
-    setScore(0);
-  }, [setScore]);
-
-  // Initial setup
-  useEffect(() => {
-    if (status === GameStatus.PLAYING && grid.length === 0) {
-      initBoard();
-    }
-  }, [status, grid.length, initBoard]);
 
   // Selection Logic helpers
   const getSelectedRange = (start: Point, end: Point) => {
@@ -77,7 +49,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     
     for (let r = minR; r <= maxR; r++) {
       for (let c = minC; c <= maxC; c++) {
-        if (!grid[r][c].isCleared) {
+        if (grid[r] && grid[r][c] && !grid[r][c].isCleared) {
           sum += grid[r][c].value;
           count++;
         }
@@ -108,38 +80,37 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     const { sum, count } = calculateSum(selection.start, selection.end);
 
     if (sum === TARGET_SUM && count > 0) {
-      // Success! Clear cells
+      // Success! Gather cells
       const { minR, maxR, minC, maxC } = getSelectedRange(selection.start, selection.end);
+      const solvedCells: AppleCell[] = [];
       
-      setGrid(prev => prev.map((row, rIdx) => {
-        if (rIdx < minR || rIdx > maxR) return row;
-        return row.map((cell, cIdx) => {
-          if (cIdx >= minC && cIdx <= maxC && !cell.isCleared) {
-            return { ...cell, isCleared: true };
+      for (let r = minR; r <= maxR; r++) {
+        for (let c = minC; c <= maxC; c++) {
+          if (!grid[r][c].isCleared) {
+            solvedCells.push(grid[r][c]);
           }
-          return cell;
-        });
-      }));
+        }
+      }
 
-      setScore(s => s + count);
+      if (solvedCells.length > 0) {
+        onSolve(solvedCells);
+      }
     }
 
     setDragStart(null);
     setSelection(null);
   };
 
-  // Touch support helper (mapping touch coordinates to grid cells)
+  // Touch support helper
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!dragStart || status !== GameStatus.PLAYING) return;
     
     const touch = e.touches[0];
-    // Optimization: In a real robust app, calculate grid coordinates relative to boardRef.
     if (boardRef.current) {
        const rect = boardRef.current.getBoundingClientRect();
        const x = touch.clientX - rect.left;
        const y = touch.clientY - rect.top;
        
-       // Approximate cell size
        const cellWidth = rect.width / COLS;
        const cellHeight = rect.height / ROWS;
        
@@ -188,7 +159,6 @@ export const GameBoard: React.FC<GameBoardProps> = ({
              <span className="text-2xl font-bold text-blue-500">{opponentScore}</span>
           </div>
         ) : (
-          // Spacer to keep layout symmetric
           <div className="flex-1 bg-transparent p-3 flex flex-col items-end opacity-50">
              <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Practice</span>
              <span className="text-xs font-bold text-gray-400">Single Mode</span>
@@ -213,7 +183,6 @@ export const GameBoard: React.FC<GameBoardProps> = ({
            className="grid gap-1"
            style={{ 
              gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))`,
-             // Fixed aspect ratio management logic roughly
              width: 'min(90vw, 800px)',
              aspectRatio: `${COLS}/${ROWS}`
            }}
@@ -235,14 +204,17 @@ export const GameBoard: React.FC<GameBoardProps> = ({
          </div>
       </div>
       
-      <div className="flex w-full justify-center mt-4">
-         <button 
-             onClick={initBoard}
-             className="flex items-center gap-2 px-4 py-2 bg-white text-gray-500 rounded-full text-sm font-medium shadow-sm hover:bg-gray-50 transition-colors"
-           >
-             <RefreshCw className="w-4 h-4" /> 보드 새로고침
-         </button>
-      </div>
+      {/* Refresh only valid for Single player or if needed */}
+      {!isConnected && onRefreshBoard && (
+        <div className="flex w-full justify-center mt-4">
+           <button 
+               onClick={onRefreshBoard}
+               className="flex items-center gap-2 px-4 py-2 bg-white text-gray-500 rounded-full text-sm font-medium shadow-sm hover:bg-gray-50 transition-colors"
+             >
+               <RefreshCw className="w-4 h-4" /> 보드 새로고침
+           </button>
+        </div>
+      )}
 
     </div>
   );

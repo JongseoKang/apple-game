@@ -1,25 +1,34 @@
-import React, { useState } from 'react';
-import { Heart, Lock, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Heart, Lock, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 import { CREDENTIALS } from '../constants';
 
 interface LoginScreenProps {
-  onLogin: (username: string, password: string) => void;
+  onLogin: (password: string) => void;
+  isLoading: boolean;
+  serverError: string | null;
 }
 
-export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
+export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, isLoading, serverError }) => {
   const [password, setPassword] = useState('');
-  const [error, setError] = useState(false);
+  const [localError, setLocalError] = useState(false);
+
+  // Clear errors when user types
+  useEffect(() => {
+    if (serverError || localError) {
+      setLocalError(false);
+    }
+  }, [password]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading) return;
     
     if (CREDENTIALS[password]) {
-      onLogin(CREDENTIALS[password], password);
-      setError(false);
+      onLogin(password);
     } else {
-      setError(true);
+      setLocalError(true);
       // Shake effect reset
-      setTimeout(() => setError(false), 500);
+      setTimeout(() => setLocalError(false), 500);
     }
   };
 
@@ -45,13 +54,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                 placeholder="비밀번호 (1004 or 0000)"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                disabled={isLoading}
                 className={`
                   w-full pl-10 pr-4 py-3 rounded-xl border-2 outline-none transition-all
-                  placeholder:text-gray-300 text-gray-700
-                  ${error 
-                    ? 'border-red-500 bg-red-50 animate-[shake_0.5s_ease-in-out]' 
+                  placeholder:text-gray-300 text-gray-700 disabled:bg-gray-50 disabled:text-gray-400
+                  ${localError || serverError
+                    ? 'border-red-500 bg-red-50' 
                     : 'border-gray-100 focus:border-red-300 focus:bg-red-50/30'
                   }
+                  ${localError ? 'animate-[shake_0.5s_ease-in-out]' : ''}
                 `}
                 inputMode="numeric"
                 pattern="[0-9]*"
@@ -60,15 +71,40 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
 
             <button
               type="submit"
-              className="w-full bg-gray-900 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-gray-800 active:scale-95 transition-all flex items-center justify-center gap-2"
+              disabled={isLoading}
+              className={`
+                w-full py-3 rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2
+                ${isLoading 
+                  ? 'bg-gray-400 cursor-wait' 
+                  : 'bg-gray-900 text-white hover:bg-gray-800 active:scale-95'
+                }
+              `}
             >
-              입장하기 <ArrowRight className="w-4 h-4" />
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" /> 접속 확인 중...
+                </>
+              ) : (
+                <>
+                  입장하기 <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
 
-            {error && (
+            {/* Error Messages */}
+            {localError && (
               <p className="text-center text-red-500 text-sm font-medium animate-pulse">
                 비밀번호가 틀렸어! 다시 확인해줘 🥺
               </p>
+            )}
+            
+            {serverError && (
+              <div className="bg-red-50 p-3 rounded-lg flex items-start gap-2 text-red-600 text-sm border border-red-100">
+                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <p className="text-left font-medium leading-tight">
+                  {serverError}
+                </p>
+              </div>
             )}
           </form>
         </div>

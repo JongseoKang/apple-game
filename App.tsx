@@ -2,13 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { GameStatus, GameMessage } from './types';
 import { GameBoard } from './components/GameBoard';
 import { LoginScreen } from './components/LoginScreen';
-import { GAME_DURATION_SECONDS, OPPONENT_MAPPING, PEER_ID_PREFIX } from './constants';
-import { Timer, Trophy, Play, LogOut, User, Heart, Users, Wifi, WifiOff } from 'lucide-react';
+import { GAME_DURATION_SECONDS, OPPONENT_MAPPING, PEER_ID_PREFIX, CREDENTIALS } from './constants';
+import { Timer, Trophy, Play, LogOut, User, Heart, Wifi, WifiOff } from 'lucide-react';
 
 const App: React.FC = () => {
   // Auth State
   const [user, setUser] = useState<string | null>(null);
   const [myPassword, setMyPassword] = useState<string | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   // Game State
   const [status, setStatus] = useState<GameStatus>(GameStatus.IDLE);
@@ -28,86 +30,132 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // Initialize Peer when logged in
-  useEffect(() => {
-    if (!user || !myPassword) return;
+  // Real-time Login Logic
+  const handleLoginAttempt = (password: string) => {
+    if (peerRef.current) {
+      peerRef.current.destroy();
+      peerRef.current = null;
+    }
 
-    const initPeer = async () => {
-      if (peerRef.current) return;
+    setIsLoggingIn(true);
+    setLoginError(null);
 
-      const myPeerId = `${PEER_ID_PREFIX}${myPassword}`;
+    const myPeerId = `${PEER_ID_PREFIX}${password}`;
+    
+    // Create Peer instance
+    const peer = new window.Peer(myPeerId, {
+      debug: 1, // Reduced debug level
+      config: {
+        'iceServers': [
+          { url: 'stun:stun.l.google.com:19302' },
+          { url: 'stun:stun1.l.google.com:19302' }
+        ]
+      }
+    });
+
+    // SUCCESS: Peer ID created successfully
+    peer.on('open', (id: string) => {
+      console.log('Login successful. Peer ID:', id);
       
-      // Create Peer
-      const peer = new window.Peer(myPeerId, {
-        debug: 2
-      });
+      // Remove login-specific error handler
+      peer.off('error');
+      
+      // Add runtime error handler
+      peer.on('error', handleRuntimePeerError);
 
-      peer.on('open', (id: string) => {
-        console.log('My peer ID is: ' + id);
-        connectToOpponent(peer);
-      });
+      // Set state
+      setUser(CREDENTIALS[password]);
+      setMyPassword(password);
+      setStatus(GameStatus.LOBBY);
+      setIsLoggingIn(false);
+      
+      peerRef.current = peer;
 
+      // Setup incoming connections
       peer.on('connection', (conn: any) => {
         console.log('Incoming connection from', conn.peer);
         setupConnection(conn);
       });
 
-      peer.on('error', (err: any) => {
-        console.error('Peer error:', err);
-        // If ID is taken, it might mean we refreshed. 
-        // In a real app we handle this better, but for now we just try to connect.
-      });
+      // Start looking for opponent
+      connectToOpponent(peer, password);
+    });
 
-      peerRef.current = peer;
-    };
-
-    const connectToOpponent = (peer: any) => {
-      if (!myPassword) return;
-      const opponentPassword = OPPONENT_MAPPING[myPassword];
-      if (!opponentPassword) return;
-
-      const targetPeerId = `${PEER_ID_PREFIX}${opponentPassword}`;
-      console.log('Trying to connect to:', targetPeerId);
-
-      const conn = peer.connect(targetPeerId);
-      setupConnection(conn);
-    };
-
-    const setupConnection = (conn: any) => {
-      conn.on('open', () => {
-        console.log('Connected to opponent!');
-        setIsConnected(true);
-        connRef.current = conn;
-      });
-
-      conn.on('data', (data: GameMessage) => {
-        handleMessage(data);
-      });
-
-      conn.on('close', () => {
-        console.log('Connection closed');
-        setIsConnected(false);
-        connRef.current = null;
-      });
+    // FAILURE: Login error (mostly duplicate ID)
+    peer.on('error', (err: any) => {
+      console.error('Login Peer error:', err);
+      setIsLoggingIn(false);
       
-      // Replace existing connection reference with the new active one if needed
-      // Simple logic: just use the latest valid one
-      connRef.current = conn;
-    };
+      if (err.type === 'unavailable-id') {
+        setLoginError("이미 접속 중인 계정이야! (혹은 방금 나갔다면 10초만 기다려줘) 😢");
+      } else if (err.type === 'browser-incompatible') {
+        setLoginError("이 브라우저는 지원하지 않아.");
+      } else if (err.type === 'disconnected') {
+        setLoginError("인터넷 연결을 확인해줘.");
+      } else {
+        setLoginError(`접속 오류: ${err.type}`);
+      }
+      
+      // Cleanup
+      peer.destroy();
+      peerRef.current = null;
+    });
+  };
 
-    initPeer();
-  }, [user, myPassword]);
+  const handleRuntimePeerError = (err: any) => {
+    // Ignore peer-unavailable errors during gameplay (it just means opponent isn't there yet)
+    if (err.type === 'peer-unavailable') return;
+    console.warn('Runtime Peer Error:', err);
+  };
+
+  const connectToOpponent = (peer: any, currentPassword: string) => {
+    const opponentPassword = OPPONENT_MAPPING[currentPassword];
+    if (!opponentPassword) return;
+
+    const targetPeerId = `${PEER_ID_PREFIX}${opponentPassword}`;
+    console.log('Looking for opponent:', targetPeerId);
+
+    // Try to connect immediately
+    const conn = peer.connect(targetPeerId);
+    setupConnection(conn);
+
+    // Also set up a retry mechanism if not connected?
+    // For simplicity, we rely on the opponent connecting to us OR us connecting to them.
+    // PeerJS is usually bidirectional enough for this simple case if both retry occasionally.
+    // But since we are in a Lobby, let's just wait. If both are in lobby, one will connect.
+  };
+
+  const setupConnection = (conn: any) => {
+    conn.on('open', () => {
+      console.log('Connected to opponent!');
+      setIsConnected(true);
+      connRef.current = conn;
+    });
+
+    conn.on('data', (data: GameMessage) => {
+      handleMessage(data);
+    });
+
+    conn.on('close', () => {
+      console.log('Connection closed');
+      setIsConnected(false);
+      connRef.current = null;
+    });
+    
+    // Keep the latest connection
+    connRef.current = conn;
+  };
 
   const handleMessage = (msg: GameMessage) => {
     switch (msg.type) {
       case 'START':
-        startGame(false); // Start as follower (don't send msg back)
+        startGame(false); // Start as follower
         break;
       case 'SCORE':
         setOpponentScore(msg.payload);
         break;
       case 'GAME_OVER':
-        // Maybe show opponent finished?
+        // Handled by time usually, but can sync here
         break;
       case 'RESTART':
          setStatus(GameStatus.LOBBY);
@@ -118,7 +166,7 @@ const App: React.FC = () => {
   };
 
   const sendMessage = (msg: GameMessage) => {
-    if (connRef.current && isConnected) {
+    if (connRef.current && connRef.current.open) {
       connRef.current.send(msg);
     }
   };
@@ -132,7 +180,6 @@ const App: React.FC = () => {
         setTimeLeft((prev) => {
           if (prev <= 1) {
             setStatus(GameStatus.GAME_OVER);
-            sendMessage({ type: 'GAME_OVER' });
             return 0;
           }
           return prev - 1;
@@ -149,12 +196,6 @@ const App: React.FC = () => {
       sendMessage({ type: 'SCORE', payload: score });
     }
   }, [score, status]);
-
-  const handleLogin = (username: string, password: string) => {
-    setUser(username);
-    setMyPassword(password);
-    setStatus(GameStatus.LOBBY);
-  };
 
   const handleLogout = () => {
     if (peerRef.current) {
@@ -198,7 +239,13 @@ const App: React.FC = () => {
 
   // If not logged in, show Login Screen
   if (!user) {
-    return <LoginScreen onLogin={handleLogin} />;
+    return (
+      <LoginScreen 
+        onLogin={handleLoginAttempt} 
+        isLoading={isLoggingIn}
+        serverError={loginError}
+      />
+    );
   }
 
   return (

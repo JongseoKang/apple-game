@@ -1,0 +1,5 @@
+{
+  "name": "Golden Apple: Sum 10",
+  "description": "The classic 'Apple Game' (Make 10). Drag to select apples that sum up to 10 to clear them. Use AI hints when you're stuck!",
+  "requestFramePermissions": []
+}

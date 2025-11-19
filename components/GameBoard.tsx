@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AppleCell, Point, SelectionBox, GameStatus } from '../types';
 import { Apple } from './Apple';
 import { ROWS, COLS, TARGET_SUM, getWeightedRandom } from '../constants';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Heart } from 'lucide-react';
 
 interface GameBoardProps {
   status: GameStatus;
@@ -10,6 +10,7 @@ interface GameBoardProps {
   score: number;
   setScore: React.Dispatch<React.SetStateAction<number>>;
   onGameOver: () => void;
+  opponentScore: number;
 }
 
 export const GameBoard: React.FC<GameBoardProps> = ({ 
@@ -17,7 +18,8 @@ export const GameBoard: React.FC<GameBoardProps> = ({
   setStatus, 
   score, 
   setScore,
-  onGameOver
+  onGameOver,
+  opponentScore
 }) => {
   const [grid, setGrid] = useState<AppleCell[][]>([]);
   const [selection, setSelection] = useState<SelectionBox | null>(null);
@@ -157,29 +159,33 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     <div className="flex flex-col items-center justify-center w-full max-w-4xl mx-auto p-2 md:p-4">
       
       {/* Top Bar */}
-      <div className="flex w-full justify-between items-center mb-4 bg-white p-3 rounded-xl shadow-sm border-2 border-amber-100">
-        <div className="flex items-center gap-4">
-          <div className="flex flex-col">
-             <span className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Score</span>
-             <span className="text-2xl font-bold text-amber-600">{score}</span>
-          </div>
-          <div className={`flex flex-col transition-opacity ${selection ? 'opacity-100' : 'opacity-0'}`}>
-             <span className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Current Sum</span>
-             <span className={`text-2xl font-bold ${isValidSum ? 'text-green-600' : 'text-red-500'}`}>
-               {currentSum}
-             </span>
-          </div>
+      <div className="flex w-full justify-between items-center mb-4 gap-2">
+        
+        {/* My Score */}
+        <div className="flex-1 bg-white p-3 rounded-xl shadow-sm border-l-4 border-red-400 flex flex-col items-start">
+           <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">My Score</span>
+           <span className="text-2xl font-bold text-gray-800">{score}</span>
         </div>
 
-        <div className="flex gap-2">
-           <button 
-             onClick={initBoard}
-             className="p-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors"
-             title="Reset Board"
-           >
-             <RefreshCw className="w-5 h-5" />
-           </button>
+        {/* Current Sum Indicator (Center) */}
+        <div className={`flex-1 flex flex-col items-center transition-opacity duration-200 ${selection ? 'opacity-100' : 'opacity-0'}`}>
+             <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">Sum</span>
+             <div className={`
+               w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold shadow-inner
+               ${isValidSum ? 'bg-green-100 text-green-600 border-2 border-green-200' : 'bg-gray-100 text-gray-500 border-2 border-gray-200'}
+             `}>
+               {currentSum}
+             </div>
         </div>
+
+        {/* Opponent Score */}
+        <div className="flex-1 bg-white p-3 rounded-xl shadow-sm border-r-4 border-blue-400 flex flex-col items-end">
+           <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest flex items-center gap-1">
+             Opponent <Heart className="w-3 h-3 fill-red-200 text-red-200" />
+           </span>
+           <span className="text-2xl font-bold text-blue-500">{opponentScore}</span>
+        </div>
+
       </div>
 
       {/* Game Grid Container */}
@@ -218,19 +224,15 @@ export const GameBoard: React.FC<GameBoardProps> = ({
              ))
            ))}
          </div>
-         
-         {/* Selection Overlay (Optional visual polish for box) */}
-         {selection && (
-            <div className="absolute pointer-events-none inset-0 z-0">
-               {/* We could render a box here, but cell highlighting is usually enough and faster */}
-            </div>
-         )}
       </div>
-
-      {/* Tutorial / Info */}
-      <div className="mt-6 text-center text-amber-800 bg-amber-50/50 p-4 rounded-lg">
-        <p className="font-semibold">Drag across numbers to sum exactly 10.</p>
-        <p className="text-sm opacity-75">Clear all apples to win!</p>
+      
+      <div className="flex w-full justify-center mt-4">
+         <button 
+             onClick={initBoard}
+             className="flex items-center gap-2 px-4 py-2 bg-white text-gray-500 rounded-full text-sm font-medium shadow-sm hover:bg-gray-50 transition-colors"
+           >
+             <RefreshCw className="w-4 h-4" /> 보드 새로고침
+         </button>
       </div>
 
     </div>

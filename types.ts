@@ -18,6 +18,7 @@ export interface SelectionBox {
 
 export enum GameStatus {
   IDLE,
+  LOBBY,     // Waiting for connection
   PLAYING,
   PAUSED,
   GAME_OVER,
@@ -31,4 +32,19 @@ export interface HintResponse {
   endRow?: number;
   endCol?: number;
   message?: string;
+}
+
+// Multiplayer Types
+export type MessageType = 'START' | 'SCORE' | 'GAME_OVER' | 'RESTART';
+
+export interface GameMessage {
+  type: MessageType;
+  payload?: any;
+}
+
+// Shim for global PeerJS
+declare global {
+  interface Window {
+    Peer: any;
+  }
 }

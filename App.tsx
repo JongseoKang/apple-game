@@ -117,13 +117,16 @@ const App: React.FC = () => {
 
     const myPeerId = `${PEER_ID_PREFIX}${password}`;
     
-    // Create Peer instance
+    // Create Peer instance with improved ICE servers for better NAT traversal
     const peer = new window.Peer(myPeerId, {
       debug: 1, // Reduced debug level
       config: {
-        'iceServers': [
-          { url: 'stun:stun.l.google.com:19302' },
-          { url: 'stun:stun1.l.google.com:19302' }
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' },
+          { urls: 'stun:stun3.l.google.com:19302' },
+          { urls: 'stun:stun4.l.google.com:19302' },
         ]
       }
     });

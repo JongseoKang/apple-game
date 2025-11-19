@@ -37,3 +37,15 @@ export const getWeightedRandom = (): number => {
   const idx = Math.floor(Math.random() * NUMBER_WEIGHTS.length);
   return NUMBER_WEIGHTS[idx];
 };
+
+// One-click Taunt Messages
+export const TAUNT_MESSAGES = [
+  "빨리 좀 해 🥱",
+  "내가 봐준다ㅋ 😏",
+  "실력 이거밖에 안돼? 🤭",
+  "손가락 쥐났어? 🐭",
+  "사랑의 힘으로 이긴다 ❤️",
+  "거기가 아니야! 😝",
+  "너무 느려 🐢",
+  "포기해라~ 😈"
+];

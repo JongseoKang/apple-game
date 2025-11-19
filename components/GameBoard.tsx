@@ -11,6 +11,7 @@ interface GameBoardProps {
   setScore: React.Dispatch<React.SetStateAction<number>>;
   onGameOver: () => void;
   opponentScore: number;
+  isConnected: boolean;
 }
 
 export const GameBoard: React.FC<GameBoardProps> = ({ 
@@ -19,7 +20,8 @@ export const GameBoard: React.FC<GameBoardProps> = ({
   score, 
   setScore,
   onGameOver,
-  opponentScore
+  opponentScore,
+  isConnected
 }) => {
   const [grid, setGrid] = useState<AppleCell[][]>([]);
   const [selection, setSelection] = useState<SelectionBox | null>(null);
@@ -154,7 +156,6 @@ export const GameBoard: React.FC<GameBoardProps> = ({
   const currentSum = selection ? calculateSum(selection.start, selection.end).sum : 0;
   const isValidSum = currentSum === TARGET_SUM;
 
-  // Render
   return (
     <div className="flex flex-col items-center justify-center w-full max-w-4xl mx-auto p-2 md:p-4">
       
@@ -178,13 +179,21 @@ export const GameBoard: React.FC<GameBoardProps> = ({
              </div>
         </div>
 
-        {/* Opponent Score */}
-        <div className="flex-1 bg-white p-3 rounded-xl shadow-sm border-r-4 border-blue-400 flex flex-col items-end">
-           <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest flex items-center gap-1">
-             Opponent <Heart className="w-3 h-3 fill-red-200 text-red-200" />
-           </span>
-           <span className="text-2xl font-bold text-blue-500">{opponentScore}</span>
-        </div>
+        {/* Opponent Score (Only visible if connected) */}
+        {isConnected ? (
+          <div className="flex-1 bg-white p-3 rounded-xl shadow-sm border-r-4 border-blue-400 flex flex-col items-end">
+             <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest flex items-center gap-1">
+               Opponent <Heart className="w-3 h-3 fill-red-200 text-red-200" />
+             </span>
+             <span className="text-2xl font-bold text-blue-500">{opponentScore}</span>
+          </div>
+        ) : (
+          // Spacer to keep layout symmetric
+          <div className="flex-1 bg-transparent p-3 flex flex-col items-end opacity-50">
+             <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Practice</span>
+             <span className="text-xs font-bold text-gray-400">Single Mode</span>
+          </div>
+        )}
 
       </div>
 

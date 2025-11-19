@@ -35,11 +35,19 @@ export interface HintResponse {
 }
 
 // Multiplayer Types
-export type MessageType = 'START' | 'SCORE' | 'GAME_OVER' | 'RESTART';
+export type MessageType = 'START' | 'SCORE' | 'GAME_OVER' | 'RESTART' | 'CHAT';
 
 export interface GameMessage {
   type: MessageType;
   payload?: any;
+}
+
+export interface ChatMessagePayload {
+  id: string;
+  sender: string; // Display Name
+  text: string;
+  isTaunt: boolean;
+  timestamp: number;
 }
 
 // Shim for global PeerJS
